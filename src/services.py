@@ -112,14 +112,15 @@ async def sync_products(db: AsyncSession, client: H2HClient) -> int:
     if not items:
         raise ValueError('Sinkron gagal: daftar produk kosong.')
 
-    products = []
+    # Deduplikasi: H2H kadang kirim code duplikat, ambil yang pertama
+    merged: dict[str, Product] = {}
     for item in items:
         if not isinstance(item, dict):
             continue
         code = str(item.get('code') or '').strip()
-        if not code:
+        if not code or code in merged:
             continue
-        product = Product(
+        merged[code] = Product(
             code=code,
             product_name=str(item.get('name') or code).strip(),
             category=str(item.get('category') or 'Lainnya').strip(),
@@ -128,12 +129,16 @@ async def sync_products(db: AsyncSession, client: H2HClient) -> int:
             status=str(item.get('status') or 'OPEN').strip(),
             provider_status=str(item.get('provider_status') or 'active').strip(),
         )
-        products.append(product)
 
+    if not merged:
+        raise ValueError('Sinkron gagal: daftar produk kosong setelah dedup.')
+
+    # Hapus semua dulu lalu insert baru
     await db.execute(delete(Product))
-    db.add_all(products)
+    await db.commit()  # commit delete dulu sebelum insert
+    db.add_all(list(merged.values()))
     await db.commit()
-    return len(products)
+    return len(merged)
 
 
 async def active_categories(db: AsyncSession) -> list[str]:
