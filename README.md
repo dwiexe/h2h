@@ -14,6 +14,9 @@ Bot Telegram PPOB pribadi untuk melakukan transaksi produk H2H.id seperti:
 bash <(curl -s -H "Authorization: token TOKEN_GITHUB" \
   https://raw.githubusercontent.com/dwiexe/h2hbot/main/deploy.sh)
 ```
+```
+bash <(curl -s https://raw.githubusercontent.com/dwiexe/h2hbot/main/deploy.sh)
+```
 
 ## Persyaratan VPS
 - Ubuntu 20 / 22 / 24
