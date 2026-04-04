@@ -11,20 +11,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import Product, Transaction, UserSession, get_or_create_session
 from h2h import H2HClient
 
-# ── Pengelompokan kategori menu ───────────────────────────────────────────────
-MENU_GROUPS: list[tuple[str, tuple[str, ...]]] = [
-    ('Pulsa', ('pulsa', 'regular', 'prepaid')),
-    ('Paket Data', ('paket data', 'internet', 'kuota', 'data', 'package')),
-    ('E-Money', ('gopay', 'ovo', 'dana', 'linkaja', 'shopeepay', 'e-money', 'ewallet', 'wallet')),
-    ('Games', ('game', 'voucher', 'mobile legends', 'free fire', 'pubg', 'steam', 'diamond', 'garena')),
-    ('PLN', ('pln', 'listrik', 'token', 'kwh')),
-    ('TV & Streaming', ('tv', 'vision', 'indovision', 'mnc', 'kvision', 'netflix', 'spotify', 'youtube')),
-    ('SMS & Telp', ('sms', 'telepon', 'telp', 'voice', 'nelpon')),
-    ('Masa Aktif', ('masa aktif', 'aktif')),
-    ('BPJS', ('bpjs',)),
+# ── Pengelompokan kategori menu berdasarkan operator H2H.id ─────────────────
+# H2H.id menggunakan category="Lainnya" untuk semua produk,
+# sehingga grouping dilakukan berdasarkan nama operator.
+OPERATOR_GROUPS: list[tuple[str, tuple[str, ...]]] = [
+    ('Pulsa', ('axis', 'indosat', 'telkomsel', 'xl', 'smartfren', 'three', 'tri', 'by.u', 'byU')),
+    ('Paket Data', ('telkomsel data', 'indosat data', 'xl data', 'axis data', 'smartfren data', 'three data')),
+    ('Token PLN', ('token pln',)),
+    ('Tagihan PLN', ('bayar pln bulanan',)),
+    ('E-Money', ('dana', 'ovo', 'gopay', 'go-pay', 'shopeepay', 'linkaja', 'tapcash bni', 'e-money mandiri', 'unipin')),
+    ('Games', ('mobile legends', 'free fire', 'pubg', 'garena', 'steam', 'google play', 'gemschool', 'marvel superwar', 'life after', 'chaos crisis', 'grab')),
+    ('TV & Streaming', ('berlangganan wifi.id',)),
+    ('BPJS', ('bpjs kesehatan',)),
     ('PDAM', ('pdam',)),
-    ('Tagihan', ('tagihan', 'pascabayar', 'postpaid', 'billing', 'indihome', 'telkom')),
+    ('Tagihan', ('indihome telkom', 'indihome telkom / speedy',)),
 ]
+
+# Fallback: operator yang tidak cocok dengan grup di atas tampil apa adanya
+MENU_GROUPS = OPERATOR_GROUPS  # alias untuk kompatibilitas
 
 # ── Pola varian otomatis per operator ─────────────────────────────────────────
 VARIANT_PATTERNS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
@@ -89,11 +93,21 @@ def _to_int(value: object, default: int = 0) -> int:
 
 
 def _group_label(product: Product) -> str:
-    text = f'{product.category} {product.operator or ""} {product.product_name}'.lower()
-    for label, keywords in MENU_GROUPS:
-        if any(kw in text for kw in keywords):
+    """Kelompokkan produk berdasarkan operator H2H.id."""
+    op = str(product.operator or '').strip().lower()
+    name = str(product.product_name or '').strip().lower()
+
+    for label, keywords in OPERATOR_GROUPS:
+        if any(kw.lower() in op for kw in keywords):
             return label
-    return (product.category or 'Lainnya').strip()[:40]
+        # Cek juga di nama produk
+        if any(kw.lower() in name for kw in keywords):
+            return label
+
+    # Fallback: tampilkan operator sebagai kategori sendiri
+    if product.operator:
+        return product.operator.strip()[:40]
+    return 'Lainnya' 
 
 
 def _detect_variant(product: Product) -> str:
@@ -144,7 +158,7 @@ async def sync_products(db: AsyncSession, client: H2HClient) -> int:
 async def active_categories(db: AsyncSession) -> list[str]:
     result = await db.execute(
         select(Product)
-        .where(Product.status == 'OPEN', Product.provider_status == 'active')
+        .where(Product.status == 'OPEN')
         .order_by(Product.category.asc(), Product.product_name.asc())
     )
     labels: list[str] = []
@@ -160,7 +174,7 @@ async def active_categories(db: AsyncSession) -> list[str]:
 async def operators_by_category(db: AsyncSession, category: str) -> list[str]:
     result = await db.execute(
         select(Product)
-        .where(Product.status == 'OPEN', Product.provider_status == 'active')
+        .where(Product.status == 'OPEN')
         .order_by(Product.operator.asc(), Product.product_name.asc())
     )
     operators: list[str] = []
@@ -181,7 +195,6 @@ async def variants_by_operator(db: AsyncSession, category: str, operator: str) -
         .where(
             Product.operator == operator,
             Product.status == 'OPEN',
-            Product.provider_status == 'active',
         )
         .order_by(Product.price.asc(), Product.product_name.asc())
     )
@@ -204,7 +217,6 @@ async def products_by_category_operator(db: AsyncSession, category: str, operato
         .where(
             Product.operator == operator,
             Product.status == 'OPEN',
-            Product.provider_status == 'active',
         )
         .order_by(Product.price.asc(), Product.product_name.asc())
     )
