@@ -17,7 +17,9 @@ bash <(curl -s -H "Authorization: token TOKEN_GITHUB" \
 ```
 bash <(curl -s https://raw.githubusercontent.com/dwiexe/h2hbot/main/deploy.sh)
 ```
-
+```
+sudo systemctl restart h2hbot
+```
 ## Persyaratan VPS
 - Ubuntu 20 / 22 / 24
 - RAM minimal 1GB
